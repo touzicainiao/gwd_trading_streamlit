@@ -166,8 +166,14 @@ def scan_logic(
                 print(f"  skip {t}: missing columns {missing_cols}", file=sys.stderr)
                 continue
 
-            # 移除 Close 中的 NaN
-            df = df.dropna(subset=['Close'])
+            # 移除 Close 中的 NaN，確保欄位存在再呼叫
+            if 'Close' in df.columns:
+                df = df.dropna(subset=['Close'])
+            else:
+                print(f"  skip {t}: Close column not found", file=sys.stderr)
+                continue
+
+
             if len(df) < min_days:
                 print(f"  skip {t}: insufficient valid Close values after dropping NaN", file=sys.stderr)
                 continue
@@ -187,11 +193,16 @@ def scan_logic(
                 print(f"  skip {t}: no valid rows after indicator calculation", file=sys.stderr)
                 continue
 
-            curr = df.iloc[-1]
-            
-            # 檢查 Close 是否為有效數值
-            if pd.isna(curr['Close']) or pd.isna(curr['MA_SHORT']) or pd.isna(curr['MA_LONG']) or pd.isna(curr['ATR']):
-                print(f"  skip {t}: latest row contains NaN values", file=sys.stderr)
+            # 從後向前找到第一個有效的數據行（避免最後一行是 NaN）
+            curr = None
+            for i in range(len(df) - 1, -1, -1):
+                row = df.iloc[i]
+                if not (pd.isna(row['Close']) or pd.isna(row['MA_SHORT']) or pd.isna(row['MA_LONG']) or pd.isna(row['ATR'])):
+                    curr = row
+                    break
+
+            if curr is None:
+                print(f"  skip {t}: all rows contain NaN values", file=sys.stderr)
                 continue
 
             condition = curr['Close'] > curr['MA_SHORT'] > curr['MA_LONG'] if REQUIRE_TRIAD else curr['Close'] > curr['MA_SHORT']
